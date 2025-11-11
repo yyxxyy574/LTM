@@ -51,7 +51,7 @@ if MODEL_SIZE == "LTM-421M":
     max_z_len = n_layers * 8  # 12 * 8 = 96
     z_dim = dim               # 1536
 
-elif MODEL_SIZE == "Samba-1.3B":
+elif MODEL_SIZE == "LTM-1.3B":
     # --- 架构 ---
     dim = 2304
     n_layers = 18

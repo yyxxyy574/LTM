@@ -9,6 +9,7 @@ from functools import partial
 import torch
 from torch.distributed import destroy_process_group, init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
+import wandb
 
 # Import configuration
 import config
@@ -63,7 +64,14 @@ def main():
     
     # Create output directories on the master process
     if master_process:
-        os.makedirs(config.out_dir, exist_ok=True)    
+        os.makedirs(config.out_dir, exist_ok=True)   
+        wandb_config = config.get_config_dict()
+        run_name = os.path.basename(config.out_dir) 
+        wandb.init(
+            project="ltm-samba-aligned", 
+            name=run_name, 
+            config=wandb_config
+        ) 
     # -----------------------------------------------------------------------------
     # Initialization and Setup
     # -----------------------------------------------------------------------------
@@ -246,7 +254,7 @@ def main():
     
         model.eval()  # Set model to evaluation mode
         for split in ["val"]:
-            batch_iter = iter_batches(split=split, batch_size=16)
+            batch_iter = iter_batches(split=split, batch_size=8)
             losses = torch.zeros(config.eval_iters)  # Track losses over evaluation iterations
             ppl_list = torch.zeros(config.eval_iters)  # Track perplexities
             kl_list = torch.zeros(config.eval_iters)  # Track KL divergences
@@ -339,6 +347,12 @@ def main():
             losses, ppl_out, kl_out = estimate_loss(current_lr)
             print(f"Step {iter_num}: val loss {losses['val']:.4f}, val PPL {ppl_out['val']:.4f}, val KL {kl_out['val']:.4f}")
     
+            wandb.log({
+                "val/loss": losses['val'],
+                "val/ppl": ppl_out['val'],
+                "val/kl": kl_out['val'],
+            }, step=iter_num)
+            
             # Save checkpoint if validation loss improved or if always_save_checkpoint is True
             if losses["val"] < best_val_loss or config.always_save_checkpoint:
                 best_val_loss = losses["val"]
@@ -426,6 +440,15 @@ def main():
                 f"{iter_num} | loss {lossf:.4f} | ppl {ppl:.4f} | kl {kl:.4f} | "
                 f"lr {lr:e} | {dt*1000:.2f}ms | mfu {running_mfu*100:.2f}%"
             )
+
+            wandb.log({
+                "train/loss": lossf,
+                "train/ppl": ppl.item(),
+                "train/kl": kl.item(),
+                "metrics/lr": lr,
+                "metrics/iter_time_ms": dt * 1000,
+                "metrics/mfu_percent": running_mfu * 100,
+            }, step=iter_num)
         
         # Update iteration counters
         iter_num += 1
@@ -440,6 +463,9 @@ def main():
     # Cleanup
     # -----------------------------------------------------------------------------
     
+    if master_process:
+        wandb.finish()
+
     # Clean up distributed training resources
     if ddp:
         destroy_process_group()

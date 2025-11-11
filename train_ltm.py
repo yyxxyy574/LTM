@@ -96,7 +96,9 @@ def main():
     
     # Set up data iterator with latent variables
     iter_batches = partial(
-        Task.iter_batches_with_latents,
+        # Task.iter_batches_with_latents,
+        Task.iter_batches_packed_with_latents,
+        data_dir=config.DATA_CACHE_DIR,
         batch_size=config.batch_size,
         max_seq_len=config.max_seq_len,
         max_z_len=config.max_z_len,
